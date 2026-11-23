@@ -8,6 +8,10 @@
     "check": "tsc --noEmit && vite build && node --check functions/index.js && tsx scripts/event-engine-check.mjs && tsx scripts/scoring-engine-check.mjs && tsx scripts/registration-engine-check.mjs && node scripts/build-check.mjs && node scripts/smoke-check.mjs && node scripts/role-access-check.mjs"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/cli": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
     "@tailwindcss/vite": "^4.3.5",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.6",

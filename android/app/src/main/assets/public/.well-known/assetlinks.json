@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.feastport.app",
+      "sha256_cert_fingerprints": [
+        "47:A2:23:21:F0:C9:73:8A:3B:C3:6E:AC:94:20:54:29:9C:5B:7C:3C:B6:9F:7F:0F:2C:E8:58:C6:91:A1:92:71"
+      ]
+    }
+  }
+]

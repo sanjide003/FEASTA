@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import {
   CheckCircle2,
   Download,
@@ -138,6 +139,7 @@ export const AppInstallFormats: React.FC<{
   };
 
   const hasAab = Boolean(pkg.aabUrl);
+  if (Capacitor.isNativePlatform()) return null;
 
   return (
     <div
@@ -204,10 +206,10 @@ export const AppInstallFormats: React.FC<{
             </span>
           </div>
           <p className="mt-1.5 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-            Standalone signed Android installer (.apk) for direct installation on Android phones and tablets.
+            Standalone Android app (.apk) for direct installation on Android phones and tablets.
           </p>
           <p className="mt-2 font-mono-num text-[11px] text-slate-500 dark:text-slate-400">
-            Android 8.0+ · Signed APK{pkg.packageId ? ` · ${pkg.packageId}` : ''}
+            Android 7.0+ · Signed APK{pkg.packageId ? ` · ${pkg.packageId}` : ''}
           </p>
         </div>
 
@@ -285,7 +287,8 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   const pkg = useAppPackageAvailability(branding);
   const [modalOpen, setModalOpen] = useState(false);
 
-  // If already running inside standalone PWA AND no binary downloads exist, keep bar ultra clean
+  // Hide install button when running inside the native Capacitor Android app or standalone PWA with no binaries
+  if (Capacitor.isNativePlatform()) return null;
   if (isInstalled && !pkg.apkUrl && !pkg.aabUrl) return null;
 
   return (

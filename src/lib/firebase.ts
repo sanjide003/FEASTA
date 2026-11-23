@@ -10,6 +10,7 @@ import {
 import { enableIndexedDbPersistence, getFirestore, type Firestore } from 'firebase/firestore';
 import { getFunctions, type Functions } from 'firebase/functions';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
+import { Capacitor } from '@capacitor/core';
 import { firebaseConfig as staticFallbackConfig } from '../../firebase-runtime-config.js';
 
 export interface RuntimeFirebaseConfig {
@@ -22,6 +23,9 @@ export interface RuntimeFirebaseConfig {
   measurementId?: string;
 }
 
+const FIREBASE_CONFIG_CACHE_KEY = 'feastport_firebase_runtime_cfg';
+const REMOTE_WEB_ORIGIN = 'https://feastareact-nine.vercel.app';
+
 const emptyConfig: RuntimeFirebaseConfig = {
   apiKey: '',
   authDomain: '',
@@ -32,11 +36,54 @@ const emptyConfig: RuntimeFirebaseConfig = {
   measurementId: '',
 };
 
-let resolvedConfig: RuntimeFirebaseConfig = {
-  ...emptyConfig,
-  ...(staticFallbackConfig || {}),
-  ...((globalThis as any).__FIREBASE_CONFIG__ || {}),
+const envConfig: Partial<RuntimeFirebaseConfig> = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || '',
 };
+
+function readCachedFirebaseConfig(): Partial<RuntimeFirebaseConfig> {
+  if (typeof window === 'undefined') return {};
+  try {
+    return JSON.parse(localStorage.getItem(FIREBASE_CONFIG_CACHE_KEY) || '{}') || {};
+  } catch {
+    return {};
+  }
+}
+
+function writeCachedFirebaseConfig(cfg: RuntimeFirebaseConfig) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(FIREBASE_CONFIG_CACHE_KEY, JSON.stringify(cfg));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function mergeUsableConfig(...sources: Array<Partial<RuntimeFirebaseConfig> | null | undefined>): RuntimeFirebaseConfig {
+  const merged: RuntimeFirebaseConfig = { ...emptyConfig };
+  for (const src of sources) {
+    if (!src) continue;
+    for (const key of Object.keys(emptyConfig) as Array<keyof RuntimeFirebaseConfig>) {
+      const val = String(src[key] || '').trim();
+      if (val && !val.includes('YOUR_')) {
+        merged[key] = val;
+      }
+    }
+  }
+  return merged;
+}
+
+let resolvedConfig: RuntimeFirebaseConfig = mergeUsableConfig(
+  readCachedFirebaseConfig(),
+  staticFallbackConfig,
+  envConfig,
+  (globalThis as any).__FIREBASE_CONFIG__
+);
 
 let appInstance: FirebaseApp | null = null;
 let authInstance: Auth | null = null;
@@ -70,21 +117,36 @@ function ensureFirebaseInstances(cfg: RuntimeFirebaseConfig) {
 
 ensureFirebaseInstances(resolvedConfig);
 
+async function fetchRemoteConfigFromOrigin(origin: string): Promise<Partial<RuntimeFirebaseConfig> | null> {
+  try {
+    const resp = await fetch(`${origin}/api/firebase-config`, { cache: 'no-store' });
+    const contentType = resp.headers.get('content-type') || '';
+    if (resp.ok && contentType.includes('application/json')) {
+      const json = await resp.json();
+      if (hasUsableConfig(json)) return json;
+    }
+  } catch {
+    // Ignore and try JS fallback if remote
+  }
+  return null;
+}
+
 export async function bootstrapFirebase(): Promise<RuntimeFirebaseConfig> {
   if (initialized) return resolvedConfig;
   initialized = true;
   if (typeof window !== 'undefined') {
-    try {
-      const resp = await fetch('/api/firebase-config', { cache: 'no-store' });
-      const contentType = resp.headers.get('content-type') || '';
-      if (resp.ok && contentType.includes('application/json')) {
-        const json = await resp.json();
-        if (hasUsableConfig(json)) {
-          resolvedConfig = { ...emptyConfig, ...json };
-        }
+    const localJson = Capacitor.isNativePlatform() ? null : await fetchRemoteConfigFromOrigin('');
+    if (localJson) {
+      resolvedConfig = mergeUsableConfig(resolvedConfig, localJson);
+      writeCachedFirebaseConfig(resolvedConfig);
+    } else if (!hasUsableConfig(resolvedConfig) && Capacitor.isNativePlatform()) {
+      const remoteJson = await fetchRemoteConfigFromOrigin(REMOTE_WEB_ORIGIN);
+      if (remoteJson) {
+        resolvedConfig = mergeUsableConfig(resolvedConfig, remoteJson);
+        writeCachedFirebaseConfig(resolvedConfig);
       }
-    } catch {
-      // Static hosting deployments (Firebase Hosting / Vercel) fall back to firebase-runtime-config.js
+    } else if (hasUsableConfig(resolvedConfig) && Capacitor.isNativePlatform()) {
+      writeCachedFirebaseConfig(resolvedConfig);
     }
   }
   ensureFirebaseInstances(resolvedConfig);

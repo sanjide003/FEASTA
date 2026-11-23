@@ -16,3 +16,5 @@ storage.rules
 .firebaserc
 metadata.json
 *.md
+android
+android-build

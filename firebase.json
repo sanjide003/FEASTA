@@ -18,7 +18,9 @@
       "**/.env*",
       "**/.vercelignore",
       "**/.firebaserc",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "android/**",
+      "android-build/**"
     ],
     "rewrites": [
       {
