@@ -1,0 +1,145 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", "Noto Sans Malayalam", system-ui, -apple-system, sans-serif;
+  --font-display: "Outfit", "Plus Jakarta Sans", "Noto Sans Malayalam", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: #F8FAFC;
+    color: #0F172A;
+    margin: 0;
+  }
+
+  .dark body {
+    background-color: #020617;
+    color: #F1F5F9;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+  }
+}
+
+.font-mono-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 3D Flip Lanyard Participant ID Card */
+.id-card-stage {
+  perspective: 1400px;
+  max-width: 360px;
+  width: 100%;
+}
+
+.id-card-inner {
+  position: relative;
+  width: 100%;
+  min-height: 500px;
+  transform-style: preserve-3d;
+  transition: transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.id-card-inner.is-flipped {
+  transform: rotateY(180deg);
+}
+
+.id-card-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  width: 100%;
+  min-height: 500px;
+}
+
+.id-card-face-back {
+  position: absolute;
+  inset: 0;
+  transform: rotateY(180deg);
+}
+
+/* Live TV Broadcast Animations */
+@keyframes tv-spotlight-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes tv-ticker-rise {
+  from {
+    opacity: 0;
+    transform: translateY(26px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tv-confetti-fall {
+  0% {
+    transform: translateY(-10vh) rotate(0deg);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(110vh) rotate(540deg);
+    opacity: 0;
+  }
+}
+
+.animate-tv-spotlight {
+  animation: tv-spotlight-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-tv-ticker {
+  animation: tv-ticker-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Print Layout Helpers */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body.print-mode-id-cards main > *:not(.print-id-cards-sheet),
+  body.print-mode-id-cards header,
+  body.print-mode-id-cards aside,
+  body.print-mode-schedule aside,
+  body.print-mode-schedule header {
+    display: none !important;
+  }
+
+  .print-card-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 16px !important;
+  }
+
+  .print-card-item {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .id-card-inner,
+  .animate-tv-spotlight,
+  .animate-tv-ticker {
+    transition: none !important;
+    animation: none !important;
+  }
+}
