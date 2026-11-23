@@ -76,7 +76,8 @@ export async function bootstrapFirebase(): Promise<RuntimeFirebaseConfig> {
   if (typeof window !== 'undefined') {
     try {
       const resp = await fetch('/api/firebase-config', { cache: 'no-store' });
-      if (resp.ok) {
+      const contentType = resp.headers.get('content-type') || '';
+      if (resp.ok && contentType.includes('application/json')) {
         const json = await resp.json();
         if (hasUsableConfig(json)) {
           resolvedConfig = { ...emptyConfig, ...json };
