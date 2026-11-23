@@ -16,6 +16,10 @@ import { getFirebaseState } from '../../lib/firebase';
 import type { BrandingConfig } from '../../types/festival';
 import { Modal } from '../ui/Modal';
 
+const DEFAULT_GITHUB_APK_URL =
+  'https://github.com/sanjide003/FEASTA/releases/latest/download/feastport.apk';
+const DEFAULT_ANDROID_PACKAGE_ID = 'com.feastport.app';
+
 interface AppPackageAvailability {
   apkUrl: string;
   aabUrl: string;
@@ -45,10 +49,10 @@ function useAppPackageAvailability(initialBranding?: BrandingConfig): AppPackage
   const [pkg, setPkg] = useState<AppPackageAvailability>(() => {
     const source = initialBranding || readCachedBranding();
     return {
-      apkUrl: isValidPackageUrl(source.appDownloads?.apkUrl),
+      apkUrl: isValidPackageUrl(source.appDownloads?.apkUrl) || DEFAULT_GITHUB_APK_URL,
       aabUrl: isValidPackageUrl(source.appDownloads?.aabUrl),
-      versionName: String(source.appDownloads?.versionName || '1.0.0').trim() || '1.0.0',
-      packageId: String(source.appDownloads?.packageId || '').trim(),
+      versionName: String(source.appDownloads?.versionName || '1.0.5').trim() || '1.0.5',
+      packageId: String(source.appDownloads?.packageId || DEFAULT_ANDROID_PACKAGE_ID).trim() || DEFAULT_ANDROID_PACKAGE_ID,
     };
   });
 
@@ -77,6 +81,9 @@ function useAppPackageAvailability(initialBranding?: BrandingConfig): AppPackage
       if (!apkUrl && (await probeStaticBinary('/downloads/feastport.apk'))) {
         apkUrl = '/downloads/feastport.apk';
       }
+      if (!apkUrl) {
+        apkUrl = DEFAULT_GITHUB_APK_URL;
+      }
       if (!aabUrl && (await probeStaticBinary('/downloads/feastport.aab'))) {
         aabUrl = '/downloads/feastport.aab';
       }
@@ -85,8 +92,10 @@ function useAppPackageAvailability(initialBranding?: BrandingConfig): AppPackage
       setPkg({
         apkUrl,
         aabUrl,
-        versionName: String(source?.appDownloads?.versionName || '1.0.0').trim() || '1.0.0',
-        packageId: String(source?.appDownloads?.packageId || '').trim(),
+        versionName: String(source?.appDownloads?.versionName || '1.0.5').trim() || '1.0.5',
+        packageId:
+          String(source?.appDownloads?.packageId || DEFAULT_ANDROID_PACKAGE_ID).trim() ||
+          DEFAULT_ANDROID_PACKAGE_ID,
       });
     };
 
