@@ -1,11 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Lock, LogIn } from 'lucide-react';
+import { AlertTriangle, Eye, EyeOff, Lock, LogIn } from 'lucide-react';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { brandingName, readCachedBranding } from '../../lib/branding';
 import { getFirebaseState } from '../../lib/firebase';
-import { resolveAuthenticatedProfile, routeForRole } from '../../lib/staffAuth';
+import {
+  resolveAuthenticatedProfile,
+  resolveStaffAuthStatus,
+  routeForRole,
+  staffEmailLookupKey,
+} from '../../lib/staffAuth';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -14,12 +19,14 @@ export const LoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [firebaseReady, setFirebaseReady] = useState(() => getFirebaseState().isFirebaseConfigured);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     document.title = `Staff Login — ${brandingName(branding)}`;
     const { auth, isFirebaseConfigured } = getFirebaseState();
+    setFirebaseReady(isFirebaseConfigured);
     if (!isFirebaseConfigured || !auth) {
       setCheckingSession(false);
       return;
@@ -43,7 +50,7 @@ export const LoginPage: React.FC = () => {
     e.preventDefault();
     const { auth, db, isFirebaseConfigured } = getFirebaseState();
     if (!isFirebaseConfigured || !auth || !db) {
-      return setError('Firebase configuration is missing.');
+      return setError('Firebase configuration is missing. Unable to connect to Authentication.');
     }
     const cleanId = identifier.trim();
     if (!cleanId || !password) {
@@ -55,7 +62,7 @@ export const LoginPage: React.FC = () => {
     try {
       let emailToUse = cleanId;
       if (!cleanId.includes('@')) {
-        const slug = cleanId.toLowerCase();
+        const slug = cleanId.toLowerCase().replace(/\s+/g, '_');
         const [accessSnap, adminSnap] = await Promise.all([
           getDoc(doc(db, 'accessUsernames', slug)).catch(() => null),
           getDoc(doc(db, 'adminUsernames', slug)).catch(() => null),
@@ -71,13 +78,27 @@ export const LoginPage: React.FC = () => {
         } else {
           emailToUse = `${slug}@fest.local`;
         }
+      } else {
+        const emailLookup = await getDoc(doc(db, 'accessUsernames', staffEmailLookupKey(cleanId))).catch(() => null);
+        const lookupData = emailLookup?.exists() ? (emailLookup.data() as any) : null;
+        if (lookupData?.active === false) {
+          throw new Error('This staff account is currently deactivated.');
+        }
+        if (lookupData?.email) {
+          emailToUse = lookupData.email;
+        }
       }
 
       const cred = await signInWithEmailAndPassword(auth, emailToUse, password);
-      const profile = await resolveAuthenticatedProfile(cred.user.uid, cred.user.email);
+      const { profile, reason } = await resolveStaffAuthStatus(cred.user.uid, cred.user.email);
       if (!profile) {
         await signOut(auth).catch(() => {});
-        throw new Error('This account does not have an active staff role.');
+        if (reason === 'inactive') {
+          throw new Error('This staff account is currently deactivated.');
+        }
+        throw new Error(
+          `Signed in (${cred.user.email || emailToUse}, UID: ${cred.user.uid}), but no active adminUsers or accessUsers profile exists in Firestore.`
+        );
       }
       navigate(routeForRole(profile.role), { replace: true });
     } catch (err: any) {
@@ -88,6 +109,15 @@ export const LoginPage: React.FC = () => {
         code === 'auth/user-not-found'
       ) {
         setError('Invalid username/email or password.');
+      } else if (code === 'auth/unauthorized-domain') {
+        const host = typeof window !== 'undefined' ? window.location.hostname : '';
+        setError(
+          `Domain "${host}" is not authorized in Firebase Authentication. Add it under Firebase Console -> Authentication -> Settings -> Authorized domains.`
+        );
+      } else if (code === 'auth/operation-not-allowed') {
+        setError('Email/Password sign-in is disabled in Firebase Console -> Authentication -> Sign-in method.');
+      } else if (code === 'auth/network-request-failed') {
+        setError('Network error while contacting Firebase Authentication. Check your internet connection.');
       } else {
         setError(err?.message || 'Sign in failed.');
       }
@@ -108,6 +138,18 @@ export const LoginPage: React.FC = () => {
             Unified access for Festival Administrators, Team Leaders, and Judges
           </p>
         </div>
+
+        {!firebaseReady && (
+          <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="font-bold">Firebase Not Connected</p>
+              <p className="mt-0.5">
+                Firebase runtime configuration could not be resolved. Staff authentication requires a valid Firebase project config.
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           {checkingSession ? (

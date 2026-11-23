@@ -56,6 +56,18 @@ const ACTIVE_STATUSES = new Set([
   'approved',
 ]);
 
+function normalizeGenderValue(value: unknown): 'Boys' | 'Girls' | '' {
+  const clean = String(value || '').trim().toLowerCase();
+  if (!clean) return '';
+  if (clean === 'boys' || clean === 'boy' || clean === 'male' || clean === 'm') return 'Boys';
+  if (clean === 'girls' || clean === 'girl' || clean === 'female' || clean === 'f') return 'Girls';
+  return '';
+}
+
+function normalizeChestValue(value: unknown): string {
+  return String(value ?? '').trim().replace(/^#/, '').toUpperCase();
+}
+
 export const RegisterPage: React.FC = () => {
   const { toast } = useDialog();
   const [branding, setBranding] = useState<BrandingConfig>(() => readCachedBranding());
@@ -78,6 +90,7 @@ export const RegisterPage: React.FC = () => {
   const [suggestions, setSuggestions] = useState<Student[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [identityError, setIdentityError] = useState('');
+  const [initError, setInitError] = useState('');
 
   // Chest modal
   const [chestModalOpen, setChestModalOpen] = useState(false);
@@ -192,7 +205,10 @@ export const RegisterPage: React.FC = () => {
     let active = true;
     async function init() {
       const { db, isFirebaseConfigured } = getFirebaseState();
-      if (!isFirebaseConfigured || !db) return;
+      if (!isFirebaseConfigured || !db) {
+        if (active) setInitError('Firebase configuration is missing. Student verification cannot connect right now.');
+        return;
+      }
       try {
         const [homeDoc, genDoc, regDoc] = await Promise.all([
           cachedGetDoc<BrandingConfig>(db, 'settings', 'home_config', { ttlMs: 300_000 }),
@@ -200,6 +216,7 @@ export const RegisterPage: React.FC = () => {
           cachedGetDoc(db, 'settings', 'registration_config', { ttlMs: 120_000 }),
         ]);
         if (!active) return;
+        setInitError('');
         if (homeDoc) setBranding(cacheBranding(homeDoc));
         else {
           clearBrandingCache();
@@ -218,8 +235,9 @@ export const RegisterPage: React.FC = () => {
           setStudent(saved.profile);
           await loadPortalData(saved.profile, saved);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn('Registration init fallback:', err);
+        if (active) setInitError(err?.message || 'Unable to load registration settings from Firestore.');
       }
     }
     init();
@@ -271,15 +289,19 @@ export const RegisterPage: React.FC = () => {
           rows = res.data?.candidates || [];
         } catch {
           const snap = await getDocs(query(collection(db, 'students'), where('team', '==', selectedTeam)));
+          const wantGender = normalizeGenderValue(selectedGender);
           rows = snap.docs
             .map((d) => ({ id: d.id, ...(d.data() as any) }))
-            .filter(
-              (s) =>
-                (!selectedGender || (s.gender || 'Boys') === selectedGender) &&
+            .filter((s) => {
+              const studentGender = normalizeGenderValue(s.gender);
+              const genderMatches = !wantGender || !studentGender || studentGender === wantGender;
+              return (
+                genderMatches &&
                 String(s.name || '')
                   .toLowerCase()
                   .includes(qText.toLowerCase())
-            )
+              );
+            })
             .slice(0, 10);
         }
         setSuggestions(rows);
@@ -310,7 +332,7 @@ export const RegisterPage: React.FC = () => {
       const snap = await getDoc(doc(db, 'students', candidateId));
       if (!snap.exists()) throw new Error('Student record not found.');
       const data = snap.data() as any;
-      if (String(data.chestNo || '').trim().toUpperCase() !== String(chestInput || '').trim().toUpperCase()) {
+      if (normalizeChestValue(data.chestNo) !== normalizeChestValue(chestInput)) {
         throw new Error('Chest number does not match.');
       }
       if (!data.team) throw new Error('This student is not assigned to any team.');
@@ -318,7 +340,7 @@ export const RegisterPage: React.FC = () => {
         id: snap.id,
         ...data,
         category: data.category || 'General',
-        gender: data.gender || 'Boys',
+        gender: normalizeGenderValue(data.gender) || 'Boys',
       };
       const newSession = {
         sessionId: `static_${snap.id}`,
@@ -513,7 +535,25 @@ export const RegisterPage: React.FC = () => {
               </p>
             </div>
 
-            {portalLockedReason ? (
+            {initError ? (
+              <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800">
+                <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <p className="font-bold">Connection Notice</p>
+                  <p className="mt-0.5">{initError}</p>
+                </div>
+              </div>
+            ) : (general.teams || []).length === 0 ? (
+              <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+                <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <p className="font-bold">Festival Setup Required</p>
+                  <p className="mt-0.5">
+                    No teams have been configured yet in Firestore. Ask the Festival Administrator to save teams and students in Admin Console.
+                  </p>
+                </div>
+              </div>
+            ) : portalLockedReason ? (
               <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
                 <Lock className="mt-0.5 h-4 w-4 shrink-0" />
                 <div>

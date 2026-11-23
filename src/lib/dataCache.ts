@@ -1,5 +1,7 @@
 import {
+  collection,
   doc,
+  getCountFromServer,
   getDoc,
   getDocFromServer,
   getDocs,
@@ -175,3 +177,28 @@ export async function cachedGetDocs<T = any>(
   inflightRequests.set(cacheKey, promise);
   return promise;
 }
+
+export async function cachedStudentCount(
+  db: Firestore,
+  { ttlMs = 120_000, forceRefresh = false, persistSession = true } = {}
+): Promise<number | null> {
+  const cacheKey = 'count:students';
+  if (!forceRefresh) {
+    const hit = getCachedValue<number | null>(cacheKey);
+    if (typeof hit === 'number') return hit;
+  }
+  if (inflightRequests.has(cacheKey)) {
+    return inflightRequests.get(cacheKey);
+  }
+  const promise = getCountFromServer(collection(db, 'students'))
+    .then((snap) => {
+      const count = Number(snap.data()?.count ?? 0);
+      return setCachedValue(cacheKey, count, ttlMs, persistSession);
+    })
+    .catch(() => null)
+    .finally(() => inflightRequests.delete(cacheKey));
+
+  inflightRequests.set(cacheKey, promise);
+  return promise;
+}
+

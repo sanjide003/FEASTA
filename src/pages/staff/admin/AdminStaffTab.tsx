@@ -17,6 +17,7 @@ import { Modal } from '../../../components/ui/Modal';
 import { slugKey } from '../../../lib/festConfig';
 import { createSecondaryStaffAuthUser, getFirebaseState } from '../../../lib/firebase';
 import { resolveDisplayName } from '../../../lib/resultUtils';
+import { staffEmailLookupKey } from '../../../lib/staffAuth';
 import type { AccessUser, GenderScope } from '../../../types/festival';
 import type { AdminActions, AdminState } from './types';
 
@@ -76,29 +77,68 @@ export const AdminStaffTab: React.FC<{ state: AdminState; actions: AdminActions 
       const targetCol = cRole === 'admin' ? 'adminUsers' : 'accessUsers';
       const usernameCol = cRole === 'admin' ? 'adminUsernames' : 'accessUsernames';
 
+      const displayName = cName.trim() || usernameSlug;
       const userPayload: Record<string, any> = {
         username: usernameSlug,
-        displayName: cName.trim() || usernameSlug,
+        displayName,
         email,
         role: cRole,
         active: true,
         authUid: uid,
+        accessDocId: uid,
         createdAt: now,
         updatedAt: now,
         ...(cRole === 'teamLeader' ? { team: cTeam, genderScope: cGenderScope } : {}),
       };
 
-      await Promise.all([
+      const lookupPayload = {
+        username: usernameSlug,
+        displayName,
+        email,
+        role: cRole,
+        authUid: uid,
+        accessDocId: uid,
+        active: true,
+        ...(cRole === 'teamLeader' ? { team: cTeam, genderScope: cGenderScope } : {}),
+      };
+
+      const extraWrites: Array<Promise<unknown>> = [
         setDoc(doc(db, targetCol, uid), userPayload),
-        setDoc(doc(db, usernameCol, usernameSlug), {
-          username: usernameSlug,
-          displayName: cName.trim() || usernameSlug,
-          email,
-          role: cRole,
-          active: true,
-          ...(cRole === 'teamLeader' ? { team: cTeam, genderScope: cGenderScope } : {}),
-        }),
-      ]);
+        setDoc(doc(db, usernameCol, usernameSlug), lookupPayload),
+      ];
+      if (usernameCol === 'accessUsernames') {
+        extraWrites.push(setDoc(doc(db, 'accessUsernames', staffEmailLookupKey(email)), lookupPayload));
+      }
+      if (cRole === 'teamLeader') {
+        extraWrites.push(
+          setDoc(doc(db, 'teamLeaders', uid), {
+            uid,
+            authUid: uid,
+            username: usernameSlug,
+            name: displayName,
+            displayName,
+            role: 'Team Leader',
+            team: cTeam,
+            genderScope: cGenderScope,
+            active: true,
+            updatedAt: now,
+          })
+        );
+      } else if (cRole === 'judge') {
+        extraWrites.push(
+          setDoc(doc(db, 'judges', uid), {
+            uid,
+            authUid: uid,
+            username: usernameSlug,
+            name: displayName,
+            displayName,
+            email,
+            active: true,
+            updatedAt: now,
+          })
+        );
+      }
+      await Promise.all(extraWrites);
 
       setCName('');
       setCUsername('');
@@ -135,15 +175,19 @@ export const AdminStaffTab: React.FC<{ state: AdminState; actions: AdminActions 
 
     setSaving(true);
     try {
-      // Optional password & email sync via Cloud Function without exposing/storing plaintext password
+      const targetUid = editingStaff.authUid || editingStaff.uid || editingStaff.id;
+      const displayName = eName.trim() || newSlug;
       if (eNewPassword) {
         const updateCreds = httpsCallable(functions, 'updateStaffCredentials');
         await updateCreds({
-          targetUid: editingStaff.authUid || editingStaff.uid || editingStaff.id,
-          sourceCollection: editingStaff.sourceCollection || 'accessUsers',
-          newPassword: eNewPassword,
-          newUsername: newSlug,
-          displayName: eName.trim() || newSlug,
+          uid: targetUid,
+          identifier: editingStaff.email || newSlug,
+          password: eNewPassword,
+          role: eRole,
+          displayName,
+          team: eRole === 'teamLeader' ? eTeam : '',
+          genderScope: eRole === 'teamLeader' ? eGenderScope : '',
+          active: editingStaff.active !== false,
         });
       }
 
@@ -151,7 +195,7 @@ export const AdminStaffTab: React.FC<{ state: AdminState; actions: AdminActions 
       const unameCol = colName === 'adminUsers' ? 'adminUsernames' : 'accessUsernames';
 
       await updateDoc(doc(db, colName, editingStaff.id), {
-        displayName: eName.trim() || newSlug,
+        displayName,
         username: newSlug,
         role: eRole,
         accessPassword: deleteField(),
@@ -162,14 +206,38 @@ export const AdminStaffTab: React.FC<{ state: AdminState; actions: AdminActions 
       if (editingStaff.username && editingStaff.username !== newSlug) {
         await deleteDoc(doc(db, unameCol, editingStaff.username)).catch(() => {});
       }
-      await setDoc(doc(db, unameCol, newSlug), {
+      const lookupPayload = {
         username: newSlug,
-        displayName: eName.trim() || newSlug,
+        displayName,
         email: editingStaff.email,
         role: eRole,
+        authUid: targetUid,
+        accessDocId: editingStaff.id,
         active: editingStaff.active !== false,
         ...(eRole === 'teamLeader' ? { team: eTeam, genderScope: eGenderScope } : {}),
-      });
+      };
+      await setDoc(doc(db, unameCol, newSlug), lookupPayload);
+      if (unameCol === 'accessUsernames' && editingStaff.email) {
+        await setDoc(doc(db, 'accessUsernames', staffEmailLookupKey(editingStaff.email)), lookupPayload).catch(() => {});
+      }
+      if (eRole === 'teamLeader') {
+        await setDoc(
+          doc(db, 'teamLeaders', editingStaff.id),
+          {
+            uid: targetUid,
+            authUid: targetUid,
+            username: newSlug,
+            name: displayName,
+            displayName,
+            role: 'Team Leader',
+            team: eTeam,
+            genderScope: eGenderScope,
+            active: editingStaff.active !== false,
+            updatedAt: Date.now(),
+          },
+          { merge: true }
+        ).catch(() => {});
+      }
 
       setEditingStaff(null);
       await actions.refreshScopes(['staff'], true);

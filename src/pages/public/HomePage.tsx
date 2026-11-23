@@ -5,7 +5,7 @@ import { Calendar, ChevronLeft, ChevronRight, RefreshCw, Trophy, UserPlus, X } f
 import { EditorialFooter, EditorialHeader } from '../../components/layout/EditorialShell';
 import { AppInstallFormats } from '../../components/pwa/PWAInstallButton';
 import { brandingName, cacheBranding, clearBrandingCache, normalizeBranding, readCachedBranding } from '../../lib/branding';
-import { cachedGetDoc, cachedGetDocs, invalidateCache } from '../../lib/dataCache';
+import { cachedGetDoc, cachedGetDocs, cachedStudentCount, invalidateCache } from '../../lib/dataCache';
 import { eventContributesToTeamScore, normalizeFestSetup, teamColor } from '../../lib/festConfig';
 import { getFirebaseState } from '../../lib/firebase';
 import { eventTimestamp, formatTime12h, normalizeResultData, resolveDisplayName } from '../../lib/resultUtils';
@@ -32,6 +32,8 @@ export const HomePage: React.FC = () => {
   const [publishedResults, setPublishedResults] = useState<ResultDoc[]>([]);
   const [judgingStatuses, setJudgingStatuses] = useState<any[]>([]);
   const [teamLeaders, setTeamLeaders] = useState<any[]>([]);
+  const [studentCountFallback, setStudentCountFallback] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -45,9 +47,11 @@ export const HomePage: React.FC = () => {
   const loadPublicData = useCallback(async (forceRefresh = false) => {
     const { db, isFirebaseConfigured } = getFirebaseState();
     if (!isFirebaseConfigured || !db) {
+      setLoadError('Firebase configuration is missing. Live festival data cannot load until Firebase is connected.');
       setLoading(false);
       return;
     }
+    setLoadError('');
     if (forceRefresh) {
       setRefreshing(true);
       invalidateCache('');
@@ -71,6 +75,13 @@ export const HomePage: React.FC = () => {
         cachedGetDocs<any>('col:teamLeaders', collection(db, 'teamLeaders'), { ttlMs: 300_000, forceRefresh }),
       ]);
 
+      if (typeof summaryDoc?.studentCount !== 'number') {
+        const aggCount = await cachedStudentCount(db, { ttlMs: 120_000, forceRefresh });
+        setStudentCountFallback(aggCount);
+      } else {
+        setStudentCountFallback(null);
+      }
+
       if (homeDoc) {
         setBranding(cacheBranding(homeDoc));
       } else {
@@ -86,8 +97,9 @@ export const HomePage: React.FC = () => {
       setPublishedResults(resList || []);
       setJudgingStatuses(statusList || []);
       setTeamLeaders(leadersList || []);
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Public data load fallback:', err);
+      setLoadError(err?.message || 'Unable to load festival data from Firestore.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -233,6 +245,20 @@ export const HomePage: React.FC = () => {
       <EditorialHeader branding={branding} publicModules={modules} />
 
       <main className="flex-1">
+        {loadError && (
+          <div className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-900 sm:px-6 lg:px-8">
+            <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+              <span>{loadError}</span>
+              <button
+                type="button"
+                onClick={() => loadPublicData(true)}
+                className="shrink-0 rounded-md border border-amber-300 bg-white px-2.5 py-1 font-semibold text-amber-900 hover:bg-amber-100"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
         {/* Hero + Next Program Stage Card */}
         <section className="border-b border-slate-200 bg-white">
           <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-12 lg:items-center lg:px-8 lg:py-14">
@@ -377,7 +403,11 @@ export const HomePage: React.FC = () => {
             <div className="rounded-xl border border-slate-200 bg-white p-5">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Registered Students</span>
               <p className="mt-2 font-mono-num text-3xl font-bold text-emerald-700">
-                {publicSummary.studentCount ?? '—'}
+                {typeof publicSummary.studentCount === 'number'
+                  ? publicSummary.studentCount
+                  : studentCountFallback !== null
+                  ? studentCountFallback
+                  : '—'}
               </p>
             </div>
           </div>
@@ -651,15 +681,16 @@ export const HomePage: React.FC = () => {
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     {teamLeaders.length ? (
                       teamLeaders.map((l) => {
+                        const leaderName = l.name || l.displayName || l.username || 'Team Leader';
                         const color = teamColor(l.team, colors);
-                        const initial = String(l.name || 'L')[0].toUpperCase();
+                        const initial = String(leaderName || 'L')[0].toUpperCase();
                         return (
                           <div key={l.id} className="flex items-center gap-3.5 rounded-xl border border-slate-200 p-3.5">
                             <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100 font-display text-sm font-bold text-slate-700">
                               {l.photoUrl ? (
                                 <img
                                   src={l.photoUrl}
-                                  alt={l.name}
+                                  alt={leaderName}
                                   className="h-full w-full object-cover"
                                   referrerPolicy="no-referrer"
                                 />
@@ -668,9 +699,9 @@ export const HomePage: React.FC = () => {
                               )}
                             </div>
                             <div className="min-w-0">
-                              <h3 className="truncate text-sm font-semibold text-slate-900">{l.name}</h3>
+                              <h3 className="truncate text-sm font-semibold text-slate-900">{leaderName}</h3>
                               <p className="truncate text-xs text-slate-500">
-                                {l.role || 'Team Leader'} ·{' '}
+                                {l.title || (l.role === 'teamLeader' ? 'Team Leader' : l.role) || 'Team Leader'} ·{' '}
                                 <span className="font-semibold" style={{ color }}>
                                   {teamNames[l.team] || l.team || ''}
                                 </span>

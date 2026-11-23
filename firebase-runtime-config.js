@@ -1,11 +1,11 @@
 // firebase-runtime-config.js
-// Runtime Firebase Web SDK configuration fallback (populated via .env or firebase-applet-config.json)
+// Runtime Firebase Web SDK configuration for test-feasta (overridable via env / /api/firebase-config)
 export const firebaseConfig = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: "",
-  measurementId: ""
+  apiKey: "AIzaSyDhOIIZeXdmeBlrg42bTnN3hhsHXdXZ_YM",
+  authDomain: "test-feasta.firebaseapp.com",
+  projectId: "test-feasta",
+  storageBucket: "test-feasta.firebasestorage.app",
+  messagingSenderId: "245121295460",
+  appId: "1:245121295460:web:4280e693a46642683e6b71",
+  measurementId: "G-6X0RZ9EWBZ"
 };

@@ -85,12 +85,12 @@ jobs:
               const hasLocalApiKey = /apiKey:\s*["\x27][^"\x27]+["\x27]/.test(localContent);
               if (hasLocalApiKey || process.env.VITE_FIREBASE_API_KEY) return;
               try {
-                const res = await fetch("https://feastareact-nine.vercel.app/firebase-runtime-config.js");
+                const res = await fetch("https://feastareact-nine.vercel.app/api/firebase-config");
                 if (res.ok) {
-                  const text = await res.text();
-                  if (/apiKey:\s*["\x27][^"\x27]+["\x27]/.test(text)) {
-                    fs.writeFileSync("firebase-runtime-config.js", text, "utf8");
-                    console.log("Synced firebase-runtime-config.js from live deployment for Capacitor APK.");
+                  const cfg = await res.json();
+                  if (cfg && cfg.apiKey) {
+                    fs.writeFileSync("firebase-runtime-config.js", `export const firebaseConfig = ${JSON.stringify(cfg, null, 2)};\n`, "utf8");
+                    console.log("Synced firebase-runtime-config.js from /api/firebase-config for Capacitor APK.");
                   }
                 }
               } catch {}

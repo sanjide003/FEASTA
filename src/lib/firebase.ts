@@ -117,16 +117,23 @@ function ensureFirebaseInstances(cfg: RuntimeFirebaseConfig) {
 
 ensureFirebaseInstances(resolvedConfig);
 
-async function fetchRemoteConfigFromOrigin(origin: string): Promise<Partial<RuntimeFirebaseConfig> | null> {
+async function fetchRemoteConfigFromOrigin(origin: string, timeoutMs = 2500): Promise<Partial<RuntimeFirebaseConfig> | null> {
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
-    const resp = await fetch(`${origin}/api/firebase-config`, { cache: 'no-store' });
+    const resp = await fetch(`${origin}/api/firebase-config`, {
+      cache: 'no-store',
+      signal: controller?.signal,
+    });
     const contentType = resp.headers.get('content-type') || '';
     if (resp.ok && contentType.includes('application/json')) {
       const json = await resp.json();
       if (hasUsableConfig(json)) return json;
     }
   } catch {
-    // Ignore and try JS fallback if remote
+    // Ignore timeout/network errors and rely on bundled or cached config
+  } finally {
+    if (timer) clearTimeout(timer);
   }
   return null;
 }
@@ -135,17 +142,33 @@ export async function bootstrapFirebase(): Promise<RuntimeFirebaseConfig> {
   if (initialized) return resolvedConfig;
   initialized = true;
   if (typeof window !== 'undefined') {
-    const localJson = Capacitor.isNativePlatform() ? null : await fetchRemoteConfigFromOrigin('');
-    if (localJson) {
-      resolvedConfig = mergeUsableConfig(resolvedConfig, localJson);
-      writeCachedFirebaseConfig(resolvedConfig);
-    } else if (!hasUsableConfig(resolvedConfig) && Capacitor.isNativePlatform()) {
-      const remoteJson = await fetchRemoteConfigFromOrigin(REMOTE_WEB_ORIGIN);
-      if (remoteJson) {
-        resolvedConfig = mergeUsableConfig(resolvedConfig, remoteJson);
+    const isNative = Capacitor.isNativePlatform();
+    const alreadyUsable = hasUsableConfig(resolvedConfig);
+
+    if (alreadyUsable) {
+      ensureFirebaseInstances(resolvedConfig);
+      if (isNative) {
         writeCachedFirebaseConfig(resolvedConfig);
+      } else {
+        // Refresh from /api/firebase-config in background without blocking initial render
+        fetchRemoteConfigFromOrigin('').then((localJson) => {
+          if (localJson && !appInstance) {
+            resolvedConfig = mergeUsableConfig(resolvedConfig, localJson);
+            writeCachedFirebaseConfig(resolvedConfig);
+            ensureFirebaseInstances(resolvedConfig);
+          } else if (localJson) {
+            writeCachedFirebaseConfig(mergeUsableConfig(resolvedConfig, localJson));
+          }
+        }).catch(() => {});
       }
-    } else if (hasUsableConfig(resolvedConfig) && Capacitor.isNativePlatform()) {
+      return resolvedConfig;
+    }
+
+    const remoteJson = isNative
+      ? await fetchRemoteConfigFromOrigin(REMOTE_WEB_ORIGIN)
+      : await fetchRemoteConfigFromOrigin('');
+    if (remoteJson) {
+      resolvedConfig = mergeUsableConfig(resolvedConfig, remoteJson);
       writeCachedFirebaseConfig(resolvedConfig);
     }
   }
