@@ -85,7 +85,7 @@ export const EditorialHeader: React.FC<EditorialHeaderProps> = ({
 
         {/* Zone 3: Install + Single Primary Action + Mobile Drawer Toggle */}
         <div className="flex items-center gap-2 shrink-0">
-          <PWAInstallButton className="hidden sm:inline-flex" />
+          <PWAInstallButton branding={branding} className="hidden sm:inline-flex" />
           {rightAction ? (
             rightAction
           ) : publicModules.registration !== false ? (

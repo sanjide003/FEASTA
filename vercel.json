@@ -8,7 +8,7 @@
   "trailingSlash": false,
   "rewrites": [
     {
-      "source": "/((?!assets/|api/|sw\\.js|workbox-.*\\.js|manifest\\.webmanifest|icon\\.svg|apple-touch-icon\\.png|pwa-.*\\.png).*)",
+      "source": "/((?!assets/|api/|downloads/|\\.well-known/|sw\\.js|workbox-.*\\.js|manifest\\.webmanifest|icon\\.svg|apple-touch-icon\\.png|pwa-.*\\.png).*)",
       "destination": "/index.html"
     }
   ],

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Calendar, ChevronLeft, ChevronRight, RefreshCw, Trophy, UserPlus, X } from 'lucide-react';
 import { EditorialFooter, EditorialHeader } from '../../components/layout/EditorialShell';
+import { AppInstallFormats } from '../../components/pwa/PWAInstallButton';
 import { brandingName, cacheBranding, clearBrandingCache, normalizeBranding, readCachedBranding } from '../../lib/branding';
 import { cachedGetDoc, cachedGetDocs, invalidateCache } from '../../lib/dataCache';
 import { eventContributesToTeamScore, normalizeFestSetup, teamColor } from '../../lib/festConfig';
@@ -725,6 +726,21 @@ export const HomePage: React.FC = () => {
             </div>
           </section>
         )}
+
+        {/* Mobile App Install & Package Downloads (PWA / APK / AAB) */}
+        <section id="install-app" className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
+          <div className="rounded-xl border border-slate-200 bg-white p-6">
+            <div className="border-b border-slate-100 pb-4">
+              <h2 className="font-display text-lg font-bold text-slate-900">Install &amp; Download App</h2>
+              <p className="text-xs text-slate-500">
+                Choose instant PWA install, direct Android APK installer, or Google Play AAB bundle
+              </p>
+            </div>
+            <div className="mt-4">
+              <AppInstallFormats branding={branding} />
+            </div>
+          </div>
+        </section>
       </main>
 
       {/* Gallery Lightbox */}

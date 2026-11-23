@@ -1,0 +1,121 @@
+name: Build Signed Android APK & AAB (TWA)
+
+on:
+  workflow_dispatch:
+    inputs:
+      site_url:
+        description: "Live HTTPS URL of your deployed Feastport site (e.g. https://feastport.vercel.app)"
+        required: true
+        type: string
+      package_id:
+        description: "Android Application ID"
+        required: true
+        default: "com.feastport.app"
+        type: string
+      version_name:
+        description: "Release Version Name"
+        required: true
+        default: "1.0.0"
+        type: string
+      version_code:
+        description: "Integer Version Code"
+        required: true
+        default: "1"
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Bubblewrap CLI
+        run: npm install -g @bubblewrap/cli
+
+      - name: Generate Android TWA Signing Keystore
+        run: |
+          mkdir -p android-build
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android-build/android.keystore
+            echo "KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> $GITHUB_ENV
+            echo "KEYSTORE_PASS=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+            echo "KEY_PASS=${{ secrets.ANDROID_KEY_PASSWORD }}" >> $GITHUB_ENV
+          else
+            keytool -genkeypair -v \
+              -keystore android-build/android.keystore \
+              -alias feastport \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass feastport123 -keypass feastport123 \
+              -dname "CN=Feastport, OU=Festival, O=Feastport, L=City, S=State, C=IN"
+            echo "KEY_ALIAS=feastport" >> $GITHUB_ENV
+            echo "KEYSTORE_PASS=feastport123" >> $GITHUB_ENV
+            echo "KEY_PASS=feastport123" >> $GITHUB_ENV
+          fi
+
+      - name: Write twa-manifest.json and build APK + AAB
+        run: |
+          SITE="${{ inputs.site_url }}"
+          HOST="${SITE#https://}"
+          HOST="${HOST#http://}"
+          HOST="${HOST%%/*}"
+          cat > android-build/twa-manifest.json <<EOF
+          {
+            "packageId": "${{ inputs.package_id }}",
+            "host": "$HOST",
+            "name": "Feastport",
+            "launcherName": "Feastport",
+            "display": "standalone",
+            "themeColor": "#1D4ED8",
+            "navigationColor": "#FFFFFF",
+            "navigationColorDark": "#0F172A",
+            "navigationDividerColor": "#E2E8F0",
+            "backgroundColor": "#F8FAFC",
+            "enableNotifications": true,
+            "startUrl": "/",
+            "iconUrl": "https://$HOST/pwa-512x512.png",
+            "maskableIconUrl": "https://$HOST/pwa-maskable-512x512.png",
+            "splashScreenFadeOutDuration": 300,
+            "signingKey": {
+              "path": "./android.keystore",
+              "alias": "$KEY_ALIAS"
+            },
+            "appVersionName": "${{ inputs.version_name }}",
+            "appVersionCode": ${{ inputs.version_code }},
+            "shortcuts": [],
+            "generatorApp": "bubblewrap-cli",
+            "webManifestUrl": "https://$HOST/manifest.webmanifest",
+            "fallbackType": "customtabs",
+            "features": {},
+            "orientation": "default"
+          }
+          EOF
+          cd android-build
+          printf "%s\n%s\n" "$KEYSTORE_PASS" "$KEY_PASS" | bubblewrap update --skipPwaValidation || bubblewrap init --manifest="https://$HOST/manifest.webmanifest"
+          printf "%s\n%s\n" "$KEYSTORE_PASS" "$KEY_PASS" | bubblewrap build
+
+      - name: Publish Release with APK & AAB
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "android-v${{ inputs.version_name }}"
+          name: "Feastport Android v${{ inputs.version_name }}"
+          files: |
+            android-build/app-release-signed.apk
+            android-build/app-release-bundle.aab

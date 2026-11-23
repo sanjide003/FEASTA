@@ -493,6 +493,88 @@ export const AdminSetupTab: React.FC<{ state: AdminState; actions: AdminActions 
             </div>
           </div>
 
+          {/* Android App Packages (APK / AAB) */}
+          <div className="space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800">
+            <div>
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                Android App Packages (APK / AAB)
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Paste hosted APK / AAB download links (e.g. from GitHub Actions TWA build or Firebase Storage) to enable direct package downloads from the home page.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Direct APK Download URL (.apk)
+                </label>
+                <input
+                  type="url"
+                  value={branding.appDownloads?.apkUrl || ''}
+                  onChange={(e) =>
+                    setBranding({
+                      ...branding,
+                      appDownloads: { ...(branding.appDownloads || {}), apkUrl: e.target.value },
+                    })
+                  }
+                  placeholder="https://.../app-release-signed.apk"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Play Store Bundle URL (.aab)
+                </label>
+                <input
+                  type="url"
+                  value={branding.appDownloads?.aabUrl || ''}
+                  onChange={(e) =>
+                    setBranding({
+                      ...branding,
+                      appDownloads: { ...(branding.appDownloads || {}), aabUrl: e.target.value },
+                    })
+                  }
+                  placeholder="https://.../app-release-bundle.aab"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  App Version
+                </label>
+                <input
+                  type="text"
+                  value={branding.appDownloads?.versionName || ''}
+                  onChange={(e) =>
+                    setBranding({
+                      ...branding,
+                      appDownloads: { ...(branding.appDownloads || {}), versionName: e.target.value },
+                    })
+                  }
+                  placeholder="1.0.0"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Android Package ID
+                </label>
+                <input
+                  type="text"
+                  value={branding.appDownloads?.packageId || ''}
+                  onChange={(e) =>
+                    setBranding({
+                      ...branding,
+                      appDownloads: { ...(branding.appDownloads || {}), packageId: e.target.value },
+                    })
+                  }
+                  placeholder="com.feastport.app"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800"
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="flex justify-end">
             <button
               type="button"

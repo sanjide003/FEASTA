@@ -22,6 +22,12 @@ export interface BrandingConfig {
     yt?: string;
     tg?: string;
   };
+  appDownloads?: {
+    apkUrl?: string;
+    aabUrl?: string;
+    versionName?: string;
+    packageId?: string;
+  };
 }
 
 export interface StudentFieldDef {

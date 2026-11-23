@@ -2,6 +2,7 @@ node_modules
 dist
 .env
 .env.*
+.github
 bun.lock
 server.ts
 scripts
