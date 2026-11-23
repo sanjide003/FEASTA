@@ -10,8 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       site_url:
-        description: "Live HTTPS URL of your deployed Feastport site (overrides TWA_SITE_URL variable)"
+        description: "Live HTTPS URL of your deployed Feastport site"
         required: false
+        default: "https://feastareact-nine.vercel.app"
         type: string
       package_id:
         description: "Android Application ID"
@@ -49,10 +50,8 @@ jobs:
           if [ -z "$RAW_URL" ]; then
             RAW_URL="${{ secrets.TWA_SITE_URL }}"
           fi
-
           if [ -z "$RAW_URL" ]; then
-            echo "::error::Missing live HTTPS URL. Set Repository Variable 'TWA_SITE_URL' (Settings -> Secrets and variables -> Actions -> Variables, e.g. https://your-app.vercel.app) or run manually with the 'site_url' input."
-            exit 1
+            RAW_URL="https://feastareact-nine.vercel.app"
           fi
 
           HOST="${RAW_URL#https://}"
@@ -212,7 +211,7 @@ jobs:
           '
           cd android-build
           bubblewrap update --skipVersionUpgrade --skipPwaValidation
-          bubblewrap build --skipPwaValidation
+          printf "%s\n%s\n" "$KEYSTORE_PASS" "$KEY_PASS" | bubblewrap build --skipPwaValidation
           cp app-release-signed.apk feastport.apk
           cp app-release-bundle.aab feastport.aab
 
