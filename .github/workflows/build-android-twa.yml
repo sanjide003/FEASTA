@@ -1,35 +1,97 @@
 name: Build Signed Android APK & AAB (TWA)
 
 on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
   workflow_dispatch:
     inputs:
       site_url:
-        description: "Live HTTPS URL of your deployed Feastport site (e.g. https://feastport.vercel.app)"
-        required: true
+        description: "Live HTTPS URL of your deployed Feastport site (overrides TWA_SITE_URL variable)"
+        required: false
         type: string
       package_id:
         description: "Android Application ID"
-        required: true
+        required: false
         default: "com.feastport.app"
         type: string
       version_name:
         description: "Release Version Name"
-        required: true
+        required: false
         default: "1.0.0"
         type: string
       version_code:
-        description: "Integer Version Code"
-        required: true
-        default: "1"
+        description: "Integer Version Code (leave blank to auto-use GitHub run number)"
+        required: false
         type: string
 
 permissions:
   contents: write
 
+concurrency:
+  group: android-twa-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-android:
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve and validate TWA configuration
+        id: config
+        run: |
+          RAW_URL="${{ inputs.site_url }}"
+          if [ -z "$RAW_URL" ]; then
+            RAW_URL="${{ vars.TWA_SITE_URL }}"
+          fi
+          if [ -z "$RAW_URL" ]; then
+            RAW_URL="${{ secrets.TWA_SITE_URL }}"
+          fi
+
+          if [ -z "$RAW_URL" ]; then
+            echo "::error::Missing live HTTPS URL. Set Repository Variable 'TWA_SITE_URL' (Settings -> Secrets and variables -> Actions -> Variables, e.g. https://your-app.vercel.app) or run manually with the 'site_url' input."
+            exit 1
+          fi
+
+          HOST="${RAW_URL#https://}"
+          HOST="${HOST#http://}"
+          HOST="${HOST%%/*}"
+
+          if [ -z "$HOST" ]; then
+            echo "::error::Invalid TWA site URL: $RAW_URL"
+            exit 1
+          fi
+
+          PACKAGE_ID="${{ inputs.package_id }}"
+          if [ -z "$PACKAGE_ID" ]; then
+            PACKAGE_ID="${{ vars.ANDROID_PACKAGE_ID }}"
+          fi
+          if [ -z "$PACKAGE_ID" ]; then
+            PACKAGE_ID="com.feastport.app"
+          fi
+
+          VERSION_NAME="${{ inputs.version_name }}"
+          if [ -z "$VERSION_NAME" ]; then
+            VERSION_NAME="1.0.${{ github.run_number }}"
+          fi
+
+          VERSION_CODE="${{ inputs.version_code }}"
+          if [ -z "$VERSION_CODE" ]; then
+            VERSION_CODE="${{ github.run_number }}"
+          fi
+
+          echo "host=$HOST" >> "$GITHUB_OUTPUT"
+          echo "origin=https://$HOST" >> "$GITHUB_OUTPUT"
+          echo "package_id=$PACKAGE_ID" >> "$GITHUB_OUTPUT"
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+
+          if ! curl -fsSLI "https://$HOST/manifest.webmanifest" >/dev/null 2>&1; then
+            echo "::warning::Could not reach https://$HOST/manifest.webmanifest yet. Ensure your web app is deployed on HTTPS."
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -44,78 +106,175 @@ jobs:
           distribution: "temurin"
           java-version: "17"
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Android SDK (modern cmdline-tools, without deprecated tools)
+        uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools build-tools;34.0.0 platforms;android-34"
 
-      - name: Install Bubblewrap CLI
-        run: npm install -g @bubblewrap/cli
+      - name: Install Bubblewrap CLI and configure SDK/JDK paths
+        run: |
+          npm install -g @bubblewrap/cli
+          SDK_PATH="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          mkdir -p "$HOME/.bubblewrap"
+          node -e '
+            const fs = require("node:fs");
+            const path = require("node:path");
+            const cfg = {
+              jdkPath: process.env.JAVA_HOME,
+              androidSdkPath: process.argv[1],
+            };
+            fs.writeFileSync(path.join(process.env.HOME, ".bubblewrap", "config.json"), JSON.stringify(cfg, null, 2));
+          ' "$SDK_PATH"
 
-      - name: Generate Android TWA Signing Keystore
+      - name: Prepare Android signing keystore
+        id: keystore
         run: |
           mkdir -p android-build
           if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
             echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android-build/android.keystore
-            echo "KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> $GITHUB_ENV
-            echo "KEYSTORE_PASS=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
-            echo "KEY_PASS=${{ secrets.ANDROID_KEY_PASSWORD }}" >> $GITHUB_ENV
+            echo "KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> "$GITHUB_ENV"
+            echo "KEYSTORE_PASS=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
+            echo "KEY_PASS=${{ secrets.ANDROID_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+            echo "using_persistent_keystore=true" >> "$GITHUB_OUTPUT"
           else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 secret not set. Generating an ephemeral test keystore; configure persistent keystore secrets for seamless app updates and Digital Asset Links."
             keytool -genkeypair -v \
               -keystore android-build/android.keystore \
               -alias feastport \
               -keyalg RSA -keysize 2048 -validity 10000 \
               -storepass feastport123 -keypass feastport123 \
               -dname "CN=Feastport, OU=Festival, O=Feastport, L=City, S=State, C=IN"
-            echo "KEY_ALIAS=feastport" >> $GITHUB_ENV
-            echo "KEYSTORE_PASS=feastport123" >> $GITHUB_ENV
-            echo "KEY_PASS=feastport123" >> $GITHUB_ENV
+            echo "KEY_ALIAS=feastport" >> "$GITHUB_ENV"
+            echo "KEYSTORE_PASS=feastport123" >> "$GITHUB_ENV"
+            echo "KEY_PASS=feastport123" >> "$GITHUB_ENV"
+            echo "using_persistent_keystore=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Write twa-manifest.json and build APK + AAB
+      - name: Extract SHA-256 fingerprint for Digital Asset Links
+        id: fingerprint
         run: |
-          SITE="${{ inputs.site_url }}"
-          HOST="${SITE#https://}"
-          HOST="${HOST#http://}"
-          HOST="${HOST%%/*}"
-          cat > android-build/twa-manifest.json <<EOF
-          {
-            "packageId": "${{ inputs.package_id }}",
-            "host": "$HOST",
-            "name": "Feastport",
-            "launcherName": "Feastport",
-            "display": "standalone",
-            "themeColor": "#1D4ED8",
-            "navigationColor": "#FFFFFF",
-            "navigationColorDark": "#0F172A",
-            "navigationDividerColor": "#E2E8F0",
-            "backgroundColor": "#F8FAFC",
-            "enableNotifications": true,
-            "startUrl": "/",
-            "iconUrl": "https://$HOST/pwa-512x512.png",
-            "maskableIconUrl": "https://$HOST/pwa-maskable-512x512.png",
-            "splashScreenFadeOutDuration": 300,
-            "signingKey": {
-              "path": "./android.keystore",
-              "alias": "$KEY_ALIAS"
-            },
-            "appVersionName": "${{ inputs.version_name }}",
-            "appVersionCode": ${{ inputs.version_code }},
-            "shortcuts": [],
-            "generatorApp": "bubblewrap-cli",
-            "webManifestUrl": "https://$HOST/manifest.webmanifest",
-            "fallbackType": "customtabs",
-            "features": {},
-            "orientation": "default"
-          }
-          EOF
+          SHA256=$(keytool -list -v \
+            -keystore android-build/android.keystore \
+            -alias "$KEY_ALIAS" \
+            -storepass "$KEYSTORE_PASS" \
+            | grep -m1 "SHA256:" \
+            | sed 's/.*SHA256:[[:space:]]*//' \
+            | tr -d '[:space:]')
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Generate twa-manifest.json and build APK + AAB
+        env:
+          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ env.KEYSTORE_PASS }}
+          BUBBLEWRAP_KEY_PASSWORD: ${{ env.KEY_PASS }}
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const host = "${{ steps.config.outputs.host }}";
+            const packageId = "${{ steps.config.outputs.package_id }}";
+            const versionName = "${{ steps.config.outputs.version_name }}";
+            const versionCode = Number("${{ steps.config.outputs.version_code }}") || 1;
+            const manifest = {
+              packageId,
+              host,
+              name: "Feastport",
+              launcherName: "Feastport",
+              display: "standalone",
+              themeColor: "#1D4ED8",
+              navigationColor: "#FFFFFF",
+              navigationColorDark: "#0F172A",
+              navigationDividerColor: "#E2E8F0",
+              backgroundColor: "#F8FAFC",
+              enableNotifications: true,
+              startUrl: "/",
+              iconUrl: `https://${host}/pwa-512x512.png`,
+              maskableIconUrl: `https://${host}/pwa-maskable-512x512.png`,
+              splashScreenFadeOutDuration: 300,
+              signingKey: {
+                path: "./android.keystore",
+                alias: process.env.KEY_ALIAS,
+              },
+              appVersionName: versionName,
+              appVersion: versionName,
+              appVersionCode: versionCode,
+              shortcuts: [],
+              generatorApp: "bubblewrap-cli",
+              webManifestUrl: `https://${host}/manifest.webmanifest`,
+              fallbackType: "customtabs",
+              features: {},
+              enableSiteSettingsShortcut: true,
+              isChromeOSOnly: false,
+              isMetaQuest: false,
+              fullScopeUrl: `https://${host}/`,
+              minSdkVersion: 21,
+              orientation: "default",
+            };
+            fs.writeFileSync("android-build/twa-manifest.json", JSON.stringify(manifest, null, 2));
+          '
           cd android-build
-          printf "%s\n%s\n" "$KEYSTORE_PASS" "$KEY_PASS" | bubblewrap update --skipPwaValidation || bubblewrap init --manifest="https://$HOST/manifest.webmanifest"
-          printf "%s\n%s\n" "$KEYSTORE_PASS" "$KEY_PASS" | bubblewrap build
+          bubblewrap update --skipVersionUpgrade --skipPwaValidation
+          bubblewrap build --skipPwaValidation
+          cp app-release-signed.apk feastport.apk
+          cp app-release-bundle.aab feastport.aab
+
+      - name: Upload Android APK & AAB workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: feastport-android-packages
+          path: |
+            android-build/feastport.apk
+            android-build/feastport.aab
+            android-build/app-release-signed.apk
+            android-build/app-release-bundle.aab
+          retention-days: 30
+
+      - name: Determine release tag
+        id: release_tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version_name }}" ]; then
+            echo "tag=android-v${{ steps.config.outputs.version_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=android-latest" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Publish Release with APK & AAB
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "android-v${{ inputs.version_name }}"
-          name: "Feastport Android v${{ inputs.version_name }}"
+          tag_name: "${{ steps.release_tag.outputs.tag }}"
+          name: "Feastport Android v${{ steps.config.outputs.version_name }} (Build ${{ steps.config.outputs.version_code }})"
+          make_latest: true
           files: |
+            android-build/feastport.apk
+            android-build/feastport.aab
             android-build/app-release-signed.apk
             android-build/app-release-bundle.aab
+
+      - name: Write build and Digital Asset Links summary
+        run: |
+          {
+            echo "## Feastport Android TWA Build Summary"
+            echo ""
+            echo "- **Live Host**: \`${{ steps.config.outputs.origin }}\`"
+            echo "- **Package ID**: \`${{ steps.config.outputs.package_id }}\`"
+            echo "- **Version**: \`${{ steps.config.outputs.version_name }}\` (Code \`${{ steps.config.outputs.version_code }}\`)"
+            echo "- **Persistent Keystore**: \`${{ steps.keystore.outputs.using_persistent_keystore }}\`"
+            echo ""
+            echo "### Direct APK Download URL (paste into Admin Setup -> Direct APK Download URL)"
+            echo "\`\`\`"
+            echo "https://github.com/${{ github.repository }}/releases/latest/download/feastport.apk"
+            echo "\`\`\`"
+            echo ""
+            echo "### Digital Asset Links (\`public/.well-known/assetlinks.json\`)"
+            echo "Paste this JSON into \`public/.well-known/assetlinks.json\` and deploy so the APK opens full-screen without the browser address bar:"
+            echo "\`\`\`json"
+            echo "["
+            echo "  {"
+            echo "    \"relation\": [\"delegate_permission/common.handle_all_urls\"],"
+            echo "    \"target\": {"
+            echo "      \"namespace\": \"android_app\","
+            echo "      \"package_name\": \"${{ steps.config.outputs.package_id }}\","
+            echo "      \"sha256_cert_fingerprints\": [\"${{ steps.fingerprint.outputs.sha256 }}\"]"
+            echo "    }"
+            echo "  }"
+            echo "]"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"

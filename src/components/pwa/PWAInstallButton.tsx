@@ -128,8 +128,18 @@ export const AppInstallFormats: React.FC<{
     setPwaMessage('Open your browser menu (⋮) and tap "Install app" or "Add to Home screen".');
   };
 
+  const hasAab = Boolean(pkg.aabUrl);
+
   return (
-    <div className={`grid gap-3 ${compactLayout ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-3'}`}>
+    <div
+      className={`grid gap-3 ${
+        compactLayout
+          ? 'grid-cols-1'
+          : hasAab
+          ? 'grid-cols-1 md:grid-cols-3'
+          : 'grid-cols-1 md:grid-cols-2'
+      }`}
+    >
       {/* Option 1: Instant PWA */}
       <div className="flex flex-col justify-between rounded-xl border border-blue-200 bg-blue-50/40 p-4 dark:border-blue-900/60 dark:bg-blue-950/20">
         <div>
@@ -143,7 +153,7 @@ export const AppInstallFormats: React.FC<{
             </span>
           </div>
           <p className="mt-1.5 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-            Install directly on Android, iOS, or Desktop with offline caching and zero storage overhead.
+            Install directly on Android, iOS, or Desktop with offline caching and automatic updates.
           </p>
           <p className="mt-2 font-mono-num text-[11px] text-slate-500 dark:text-slate-400">
             Android · iOS · Desktop · Auto-Updates
@@ -185,7 +195,7 @@ export const AppInstallFormats: React.FC<{
             </span>
           </div>
           <p className="mt-1.5 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-            Standalone Android installer package for direct sideloading on phones and tablets.
+            Standalone signed Android installer (.apk) for direct installation on Android phones and tablets.
           </p>
           <p className="mt-2 font-mono-num text-[11px] text-slate-500 dark:text-slate-400">
             Android 8.0+ · Signed APK{pkg.packageId ? ` · ${pkg.packageId}` : ''}
@@ -206,34 +216,34 @@ export const AppInstallFormats: React.FC<{
             </a>
           ) : (
             <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-center text-[11px] font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-400">
-              APK not published yet · Build via GitHub Actions TWA or add APK URL in Admin Setup
+              APK link not configured yet · Paste GitHub Release APK URL in Admin Setup
             </div>
           )}
         </div>
       </div>
 
-      {/* Option 3: Play Store Bundle (.aab) */}
-      <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <div>
-          <div className="flex items-center justify-between gap-2">
-            <span className="inline-flex items-center gap-1.5 font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-              <FileArchive className="h-4 w-4 text-slate-700 dark:text-slate-300" />
-              App Bundle (.aab)
-            </span>
-            <span className="font-mono-num text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-              v{pkg.versionName}
-            </span>
+      {/* Option 3: Play Store Bundle (.aab) — shown only when explicitly published */}
+      {hasAab && (
+        <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1.5 font-display text-sm font-bold text-slate-900 dark:text-slate-100">
+                <FileArchive className="h-4 w-4 text-slate-700 dark:text-slate-300" />
+                App Bundle (.aab)
+              </span>
+              <span className="font-mono-num text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                v{pkg.versionName}
+              </span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+              Google Play Console bundle only (cannot be installed directly on phones — use APK or PWA).
+            </p>
+            <p className="mt-2 font-mono-num text-[11px] text-slate-500 dark:text-slate-400">
+              Play Console · Signed AAB{pkg.packageId ? ` · ${pkg.packageId}` : ''}
+            </p>
           </div>
-          <p className="mt-1.5 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-            Signed Android App Bundle formatted for publishing directly on Google Play Console.
-          </p>
-          <p className="mt-2 font-mono-num text-[11px] text-slate-500 dark:text-slate-400">
-            Play Console · Signed AAB{pkg.packageId ? ` · ${pkg.packageId}` : ''}
-          </p>
-        </div>
 
-        <div className="mt-4">
-          {pkg.aabUrl ? (
+          <div className="mt-4">
             <a
               href={pkg.aabUrl}
               download="feastport.aab"
@@ -244,13 +254,9 @@ export const AppInstallFormats: React.FC<{
               <span>Download AAB</span>
               {/^https?:\/\//i.test(pkg.aabUrl) && <ExternalLink className="h-3 w-3 opacity-75" />}
             </a>
-          ) : (
-            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-center text-[11px] font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-400">
-              AAB not published yet · Build via GitHub Actions TWA or add AAB URL in Admin Setup
-            </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
@@ -278,7 +284,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       <button
         type="button"
         onClick={() => setModalOpen(true)}
-        title="Install or Download App (PWA / APK / AAB)"
+        title="Install App (PWA / Android APK)"
         aria-label="Install App"
         className={
           compact
@@ -294,8 +300,12 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         title="Install & Download App"
-        subtitle="Choose PWA instant install, Android APK installer, or Google Play AAB bundle"
-        maxWidthClass="max-w-3xl"
+        subtitle={
+          pkg.aabUrl
+            ? 'Choose PWA instant install, Android APK installer, or Google Play AAB bundle'
+            : 'Install instantly as a PWA on any device or download the direct Android APK'
+        }
+        maxWidthClass={pkg.aabUrl ? 'max-w-3xl' : 'max-w-2xl'}
       >
         <AppInstallFormats branding={branding} />
       </Modal>

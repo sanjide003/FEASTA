@@ -733,7 +733,7 @@ export const HomePage: React.FC = () => {
             <div className="border-b border-slate-100 pb-4">
               <h2 className="font-display text-lg font-bold text-slate-900">Install &amp; Download App</h2>
               <p className="text-xs text-slate-500">
-                Choose instant PWA install, direct Android APK installer, or Google Play AAB bundle
+                Install instantly as a PWA on any device or download the direct Android APK
               </p>
             </div>
             <div className="mt-4">

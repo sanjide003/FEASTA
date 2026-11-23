@@ -500,7 +500,7 @@ export const AdminSetupTab: React.FC<{ state: AdminState; actions: AdminActions 
                 Android App Packages (APK / AAB)
               </p>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Paste hosted APK / AAB download links (e.g. from GitHub Actions TWA build or Firebase Storage) to enable direct package downloads from the home page.
+                Paste your GitHub Release APK link (e.g. https://github.com/&lt;owner&gt;/&lt;repo&gt;/releases/latest/download/feastport.apk) for direct phone installs. Note: .aab is optional and only for Google Play Console uploads.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -517,13 +517,13 @@ export const AdminSetupTab: React.FC<{ state: AdminState; actions: AdminActions 
                       appDownloads: { ...(branding.appDownloads || {}), apkUrl: e.target.value },
                     })
                   }
-                  placeholder="https://.../app-release-signed.apk"
+                  placeholder="https://github.com/.../releases/latest/download/feastport.apk"
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800"
                 />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Play Store Bundle URL (.aab)
+                  Play Store Bundle URL (.aab, optional)
                 </label>
                 <input
                   type="url"
@@ -534,7 +534,7 @@ export const AdminSetupTab: React.FC<{ state: AdminState; actions: AdminActions 
                       appDownloads: { ...(branding.appDownloads || {}), aabUrl: e.target.value },
                     })
                   }
-                  placeholder="https://.../app-release-bundle.aab"
+                  placeholder="https://github.com/.../releases/latest/download/feastport.aab"
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800"
                 />
               </div>
