@@ -1,5 +1,6 @@
 import React, { Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { OfflineIndicator } from './components/pwa/PWAInstallButton';
 import { DialogProvider } from './components/ui/DialogContext';
 import { HomePage } from './pages/public/HomePage';
 import { RegisterPage } from './pages/public/RegisterPage';
@@ -62,6 +63,7 @@ export const App: React.FC = () => {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
+        <OfflineIndicator />
       </DialogProvider>
     </BrowserRouter>
   );

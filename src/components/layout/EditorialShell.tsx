@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import type { BrandingConfig } from '../../types/festival';
 import { brandingName, currentYear, isBase64Image } from '../../lib/branding';
+import { PWAInstallButton } from '../pwa/PWAInstallButton';
 
 interface EditorialHeaderProps {
   branding: BrandingConfig;
@@ -82,8 +83,9 @@ export const EditorialHeader: React.FC<EditorialHeaderProps> = ({
           )}
         </nav>
 
-        {/* Zone 3: Single Primary Action + Mobile Drawer Toggle */}
+        {/* Zone 3: Install + Single Primary Action + Mobile Drawer Toggle */}
         <div className="flex items-center gap-2 shrink-0">
+          <PWAInstallButton className="hidden sm:inline-flex" />
           {rightAction ? (
             rightAction
           ) : publicModules.registration !== false ? (
@@ -151,6 +153,9 @@ export const EditorialHeader: React.FC<EditorialHeaderProps> = ({
                 Register
               </Link>
             )}
+            <div className="pt-1 sm:hidden">
+              <PWAInstallButton className="w-full justify-center" />
+            </div>
           </div>
         </nav>
       )}

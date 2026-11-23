@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ExternalLink, LogOut, Menu, Moon, Sun, X, type LucideIcon } from 'lucide-react';
+import { PWAInstallButton } from '../pwa/PWAInstallButton';
 
 export interface WorkspaceNavItem {
   id: string;
@@ -162,6 +163,7 @@ export const WorkspaceShell: React.FC<WorkspaceShellProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <PWAInstallButton compact />
             {headerActions}
             {onToggleTheme && (
               <button

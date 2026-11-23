@@ -8,11 +8,20 @@
   "trailingSlash": false,
   "rewrites": [
     {
-      "source": "/((?!assets/|api/).*)",
+      "source": "/((?!assets/|api/|sw\\.js|workbox-.*\\.js|manifest\\.webmanifest|icon\\.svg|apple-touch-icon\\.png|pwa-.*\\.png).*)",
       "destination": "/index.html"
     }
   ],
   "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    },
     {
       "source": "/(.*)",
       "headers": [
