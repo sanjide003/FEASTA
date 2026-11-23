@@ -114,6 +114,17 @@ jobs:
         run: |
           npm install -g @bubblewrap/cli
           SDK_PATH="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          if [ ! -d "$SDK_PATH/tools/bin" ] && [ -d "$SDK_PATH/cmdline-tools" ]; then
+            CMDLINE_DIR=""
+            if [ -d "$SDK_PATH/cmdline-tools/latest/bin" ]; then
+              CMDLINE_DIR="$SDK_PATH/cmdline-tools/latest"
+            else
+              CMDLINE_DIR=$(find "$SDK_PATH/cmdline-tools" -mindepth 1 -maxdepth 1 -type d | head -n1)
+            fi
+            if [ -n "$CMDLINE_DIR" ]; then
+              sudo ln -sfn "$CMDLINE_DIR" "$SDK_PATH/tools"
+            fi
+          fi
           mkdir -p "$HOME/.bubblewrap"
           node -e '
             const fs = require("node:fs");
@@ -124,6 +135,8 @@ jobs:
             };
             fs.writeFileSync(path.join(process.env.HOME, ".bubblewrap", "config.json"), JSON.stringify(cfg, null, 2));
           ' "$SDK_PATH"
+          bubblewrap updateConfig --jdkPath="$JAVA_HOME" --androidSdkPath="$SDK_PATH" || true
+          bubblewrap doctor || true
 
       - name: Prepare Android signing keystore
         id: keystore
